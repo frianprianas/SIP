@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "839020272136",
+    "project_id": "sip-bn-666",
+    "storage_bucket": "sip-bn-666.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:839020272136:android:fb11a40b57ec2e57630fbd",
+        "android_client_info": {
+          "package_name": "com.example.sip"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBbRjC8I8_dr6jOvfDmDvTK0tPxgJ451-M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:839020272136:android:149da53a5dc86344630fbd",
+        "android_client_info": {
+          "package_name": "com.smkbaknus666.sip"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBbRjC8I8_dr6jOvfDmDvTK0tPxgJ451-M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

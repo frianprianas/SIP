@@ -46,9 +46,28 @@ class _KelasScreenState extends State<KelasScreen> {
       );
       print('Kehadiran list didapat: ${kehadiranList.length}');
       if (mounted) {
+        // Deduplikasi: satu record per nis. Prioritaskan status 'masuk'/'hadir' jika ada.
+        final Map<String, Kehadiran> mapByNis = {};
+        int _priority(String status) {
+          final s = status.toLowerCase();
+          if (s.contains('masuk') || s.contains('hadir')) return 2;
+          return 1;
+        }
+        for (var k in kehadiranList) {
+          final nis = k.nis;
+          if (!mapByNis.containsKey(nis)) {
+            mapByNis[nis] = k;
+          } else {
+            final existing = mapByNis[nis]!;
+            if (_priority(k.status) > _priority(existing.status)) {
+              mapByNis[nis] = k;
+            }
+          }
+        }
+        final dedupedList = mapByNis.values.toList();
         setState(() {
           _students = siswaList;
-          _kehadiranList = kehadiranList;
+          _kehadiranList = dedupedList;
         });
       }
     } catch (e) {

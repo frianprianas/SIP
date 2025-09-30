@@ -260,11 +260,10 @@ Future<List<Kehadiran>> getRiwayatPresensi(
   Future<List<Catatan>> getCatatanList({String? nis}) async {
     Uri url;
     if (nis != null && nis.isNotEmpty) {
-      url = Uri.parse('$_baseUrl/catatan/get_catatan_by_nis.php?nis=$nis');
+      url = Uri.parse('$_baseUrl/catatan/get_catatan.php?nis=$nis');
     } else {
       url = Uri.parse('$_baseUrl/catatan/get_all_catatan.php');
     }
-    
     try {
       final response = await http.get(url);
       if (response.statusCode == 200) {
@@ -314,7 +313,7 @@ Future<List<Kehadiran>> getRiwayatPresensi(
   
   /// Metode untuk mengambil catatan guru (berdasarkan NIPY).
   Future<List<CatatanGuru>> getCatatanGuruList(String nipy, String formattedDate) async {
-    final url = Uri.parse('$_baseUrl/catatan_guru/get_by_nipy.php?nipy=$nipy');
+    final url = Uri.parse('$_baseUrl/catatan_guru/get_catatan.php?nipy=$nipy');
     try {
       final response = await http.get(url);
       if (response.statusCode == 200) {
@@ -339,8 +338,10 @@ Future<List<Kehadiran>> getRiwayatPresensi(
   /// Mengambil catatan guru tunggal (berdasarkan NIPY & tanggal).
   Future<Catatan?> getCatatanGuru(String nipy, String tanggalCatatan) async {
     final url = Uri.parse('$_baseUrl/catatan_guru/get_catatan.php?nipy=$nipy&tanggal=$tanggalCatatan');
+    print('DEBUG getCatatanGuru URL: $url');
     try {
       final response = await http.get(url);
+      print('DEBUG getCatatanGuru Response: ${response.statusCode} - ${response.body}');
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body) as Map<String, dynamic>;
         if (responseData['success'] == true && responseData['data'] != null) {
@@ -351,13 +352,13 @@ Future<List<Kehadiran>> getRiwayatPresensi(
             return Catatan.fromJson(data as Map<String, dynamic>);
           }
         }
+        print('API Error (getCatatanGuru): Data tidak valid atau kosong.');
         return null;
       } else {
-        print('HTTP Error (getCatatan): ${response.statusCode}');
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error during getCatatan: $e');
+      print('Error during getCatatanGuru: $e');
       throw Exception('Terjadi kesalahan koneksi atau parsing: $e');
     }
   }
@@ -371,12 +372,19 @@ Future<List<Kehadiran>> getRiwayatPresensi(
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(catatanguru.toJson()),
       );
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body) as Map<String, dynamic>;
-        if (responseData['success'] == true) {
-          return {'success': true, 'message': responseData['message']};
-        } else {
-          return {'success': false, 'message': responseData['message'] ?? 'Gagal menyimpan catatan.'};
+
+      // Accept 200 OK and 201 Created as success
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        try {
+          final responseData = jsonDecode(response.body) as Map<String, dynamic>;
+          if (responseData['success'] == true) {
+            return {'success': true, 'message': responseData['message'] ?? 'Berhasil'};
+          } else {
+            return {'success': false, 'message': responseData['message'] ?? 'Gagal menyimpan catatan.'};
+          }
+        } catch (e) {
+          print('Error decoding addOrUpdateCatatanGuru response JSON: $e');
+          return {'success': false, 'message': 'Response tidak dapat diproses: $e'};
         }
       } else {
         print('HTTP Error (addOrUpdateCatatanGuru): ${response.statusCode} - ${response.body}');
@@ -508,8 +516,10 @@ Future<List<Kehadiran>> getRiwayatPresensi(
   /// Mengembalikan objek Kelas jika ditemukan, atau null jika tidak.
   Future<Kelas?> getKelasByNipy(String nipy) async {
     final url = Uri.parse('$_baseUrl/presensi/get_kelas_by_nipy.php?nipy=$nipy');
+    print('DEBUG getKelasByNipy URL: $url');
     try {
       final response = await http.get(url);
+      print('DEBUG getKelasByNipy Response: ${response.statusCode} - ${response.body}');
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body) as Map<String, dynamic>;
         if (responseData['success'] == true && responseData['data'] != null) {
@@ -691,5 +701,75 @@ Future<List<Map<String, dynamic>>> getRekapKetidakhadiranBulanan(String nis, int
   return data.map((e) => Map<String, dynamic>.from(e)).toList();
 }
 
+/// Ambil daftar tanggal yang memiliki catatan untuk NIS pada bulan tertentu.
+/// Mengembalikan list tanggal dalam format 'yyyy-MM-dd'.
+Future<List<String>> getDatesWithNotes(String nis, int year, int month) async {
+  final url = Uri.parse('$_baseUrl/catatan/get_dates_with_notes.php?nis=$nis&year=$year&month=$month');
+  try {
+    final response = await http.get(url);
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      // Jika responseData adalah Map dengan struktur { success: true, data: [...] }
+      if (responseData is Map<String, dynamic> && responseData['success'] == true && responseData['data'] is List) {
+        final List<dynamic> dataList = responseData['data'];
+        // Pastikan setiap item dikonversi ke string tanggal 'yyyy-MM-dd'
+        final List<String> dates = dataList.map((item) {
+          if (item is String) return item;
+          if (item is Map && item['tanggal'] != null) return item['tanggal'].toString();
+          return item.toString();
+        }).where((s) => s.isNotEmpty).toList();
+        return dates;
+      } else if (responseData is List) {
+        // Toleransi: jika API langsung mengembalikan array tanggal
+        return responseData.map((e) => e.toString()).toList();
+      } else {
+        print('API Error (getDatesWithNotes): unexpected response format: ${response.body}');
+        return [];
+      }
+    } else {
+      print('HTTP Error (getDatesWithNotes): ${response.statusCode} - ${response.body}');
+      return [];
+    }
+  } catch (e) {
+    print('Error during getDatesWithNotes: $e');
+    return [];
+  }
 }
 
+/// Ambil daftar tanggal yang memiliki catatan guru untuk NIPY pada bulan tertentu.
+/// Mengembalikan list tanggal dalam format 'yyyy-MM-dd'.
+Future<List<String>> getDatesWithNotesGuru(String nipy, int year, int month) async {
+  final url = Uri.parse('$_baseUrl/catatan_guru/get_dates_with_notes.php?nipy=$nipy&year=$year&month=$month');
+  print('API getDatesWithNotesGuru - URL: $url');
+  try {
+    final response = await http.get(url);
+    print('API getDatesWithNotesGuru - Status: ${response.statusCode} Body: ${response.body}');
+    if (response.statusCode == 200) {
+      final responseData = jsonDecode(response.body);
+      if (responseData is Map<String, dynamic> && responseData['success'] == true && responseData['data'] is List) {
+        final List<dynamic> dataList = responseData['data'];
+        final List<String> dates = dataList.map((item) {
+          if (item is String) return item;
+          if (item is Map && item['tanggal'] != null) return item['tanggal'].toString();
+          return item.toString();
+        }).where((s) => s.isNotEmpty).toList();
+        print('Parsed dates: $dates');
+        return dates;
+      } else if (responseData is List) {
+        final dates = responseData.map((e) => e.toString()).toList();
+        print('Parsed dates (list response): $dates');
+        return dates;
+      } else {
+        print('API Error (getDatesWithNotesGuru): unexpected response format');
+        return [];
+      }
+    } else {
+      print('HTTP Error (getDatesWithNotesGuru): ${response.statusCode} - ${response.body}');
+      return [];
+    }
+  } catch (e) {
+    print('Error during getDatesWithNotesGuru: $e');
+    return [];
+  }
+}
+}

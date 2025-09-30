@@ -1,10 +1,14 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:http/http.dart' as http;
 import '../services/api_service.dart';
 import '../models/siswa.dart';
 import '../models/guru.dart';
 import '../utils/auth_manager.dart';
+import '../utils/constants.dart'; // <-- Tambahkan ini
 import 'dashboard_siswa_screen.dart';
 import 'dashboard_guru_screen.dart';
 
@@ -25,6 +29,31 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // State untuk menyimpan tipe pengguna yang dipilih
   String _selectedUserType = 'siswa';
+
+  // --- FUNGSI BARU UNTUK MENYIMPAN TOKEN ---
+  Future<void> _saveTokenToServer(String token, String userId, String userType) async {
+    // Menggunakan baseUrl dari AppConstants
+    final url = '${AppConstants.baseUrl}/update_token.php'; 
+
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        body: {
+          'user_id': userId,
+          'user_type': userType,
+          'fcm_token': token,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        print('FCM Token berhasil disimpan ke server untuk user: $userId');
+      } else {
+        print('Gagal menyimpan FCM Token: ${response.body}');
+      }
+    } catch (e) {
+      print('Error saat mengirim token ke server: $e');
+    }
+  }
 
   Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
@@ -54,10 +83,39 @@ class _LoginScreenState extends State<LoginScreen> {
         // Mainkan suara sukses
         try {
           await _audioPlayer.play(AssetSource('sounds/success.mp3'));
-          await Future.delayed(const Duration(seconds: 4));
+          // Hapus jeda untuk mempercepat
+          // await Future.delayed(const Duration(seconds: 4)); 
         } catch (e) {
           print("Error playing audio: $e");
         }
+
+        // --- LOGIKA SIMPAN TOKEN SETELAH LOGIN ---
+        String? fcmToken;
+        try {
+          fcmToken = await FirebaseMessaging.instance.getToken();
+        } on FirebaseException catch (e) {
+          if (e.code == 'apns-token-not-set') {
+            print('FCM Token belum tersedia (apns-token-not-set), login tetap dilanjutkan.');
+            fcmToken = null;
+          } else {
+            print('FirebaseException saat ambil FCM Token: $e');
+            fcmToken = null;
+          }
+        } catch (e) {
+          print('Error saat ambil FCM Token: $e');
+          fcmToken = null;
+        }
+        
+        if (fcmToken != null) {
+          String userId;
+          if (_selectedUserType == 'siswa') {
+            userId = (result['data'] as Siswa).nis;
+          } else {
+            userId = (result['data'] as Guru).nipy;
+          }
+          await _saveTokenToServer(fcmToken, userId, _selectedUserType);
+        }
+        // --- AKHIR LOGIKA SIMPAN TOKEN ---
 
         // Navigasi ke dashboard yang sesuai berdasarkan tipe pengguna
         if (mounted) {
@@ -72,7 +130,6 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             );
           } else {
-            // Jika login sebagai guru, navigasi ke DashboardGuruScreen
             final guru = result['data'] as Guru;
             // MEMPERBAIKI: Menggunakan metode saveGuruLoginStatus yang benar
             await AuthManager.saveGuruLoginStatus(guru);

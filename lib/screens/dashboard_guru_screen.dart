@@ -1,5 +1,7 @@
 // File: lib/screens/dashboard_guru_screen.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -26,15 +28,28 @@ class DashboardGuruScreen extends StatefulWidget {
 
 class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
   final ApiService _apiService = ApiService();
-  KehadiranGuru? _lastKehadiran; // Menggunakan model KehadiranGuru
-  Kelas? _guruKelas; // Variabel baru untuk menyimpan data kelas guru
-  bool _isLoadingKelas = true; // Variabel untuk status loading kelas
+  KehadiranGuru? _lastKehadiran;
+  Kelas? _guruKelas;
+  bool _isLoadingKelas = true;
+
+  // Simpan pesan error saat cek kelas gagal
+  String? _kelasErrorMessage;
+
+  // --- New: preview catatan (marquee) ---
+  String _lastNotePreview = '';
+  final ScrollController _catatanPreviewController = ScrollController();
+  Timer? _marqueeTimer;
+  bool _marqueeAnimating = false;
+  final Duration _marqueeDelay = const Duration(milliseconds: 800);
+  final Duration _marqueeScrollDuration = const Duration(seconds: 6);
+  // --- end new ---
 
   @override
   void initState() {
     super.initState();
     _fetchInitialLastKehadiran();
-    _checkGuruClass(); // Panggil fungsi baru ini saat initState
+    _checkGuruClass();
+    _fetchLatestCatatanPreview(); // load preview on init
   }
 
   /// Mengambil data kehadiran guru terakhir dari API.
@@ -72,24 +87,57 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
       setState(() {
         _guruKelas = kelasData;
         _isLoadingKelas = false;
+        _kelasErrorMessage = null;
       });
     } catch (e) {
       print('Error checking guru class: $e');
+      // Set pesan yang lebih ramah sesuai permintaan
+      _kelasErrorMessage = 'Anda bukan Wali Kelas';
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Gagal memeriksa data kelas: $e',
-              style: GoogleFonts.poppins(color: Colors.white),
-            ),
-            backgroundColor: Colors.red,
+        final snack = SnackBar(
+          content: Text('Anda bukan Wali Kelas'),
+          backgroundColor: Colors.red,
+          action: SnackBarAction(
+            label: 'Detil',
+            textColor: Colors.white,
+            onPressed: () => _showKelasErrorDialog(),
           ),
         );
+        ScaffoldMessenger.of(context).showSnackBar(snack);
       }
       setState(() {
         _isLoadingKelas = false;
       });
     }
+  }
+
+  // Tampilkan dialog detil error dan opsi retry
+  void _showKelasErrorDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Detil Error Cek Kelas'),
+        content: Text(_kelasErrorMessage ?? 'Tidak ada detil error.'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: const Text('Tutup'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              setState(() {
+                _isLoadingKelas = true;
+              });
+              _checkGuruClass();
+            },
+            child: const Text('Coba Lagi'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Metode untuk logout dan membersihkan status login.
@@ -136,6 +184,78 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
     }
   }
 
+  // Fetch latest catatan for guru and start marquee if needed
+  Future<void> _fetchLatestCatatanPreview() async {
+    try {
+      final list = await _apiService.getCatatanGuruList(widget.guru.nipy, '');
+      print('DEBUG getCatatanGuruList result: ${list.length}');
+      for (var item in list) {
+        print('DEBUG item: tanggal=${item.tanggalCatatan}, text=${item.catatanText}');
+      }
+      if (list.isNotEmpty) {
+        // Sort by tanggal_catatan descending, ambil yang terbaru
+        list.sort((a, b) {
+          final ta = DateTime.tryParse(a.tanggalCatatan ?? '') ?? DateTime(2000);
+          final tb = DateTime.tryParse(b.tanggalCatatan ?? '') ?? DateTime(2000);
+          return tb.compareTo(ta);
+        });
+        final latest = list.first.catatanText ?? '';
+        if (mounted) {
+          setState(() {
+            _lastNotePreview = latest.trim();
+          });
+          // Pastikan animasi dipanggil setelah build selesai
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _startMarquee();
+          });
+        }
+      } else {
+        print('DEBUG: Tidak ada catatan guru ditemukan.');
+      }
+    } catch (e) {
+      print('Error fetching latest catatan preview: $e');
+    }
+  }
+
+  void _startMarquee() {
+    _marqueeTimer?.cancel();
+    _marqueeAnimating = false;
+    // Pastikan controller hanya di satu widget scroll
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final maxScroll = _catatanPreviewController.position.hasContentDimensions
+          ? _catatanPreviewController.position.maxScrollExtent
+          : 0.0;
+      print('DEBUG marquee: preview="${_lastNotePreview}", maxScroll=$maxScroll');
+      if (_lastNotePreview.isEmpty || maxScroll <= 0) return;
+      // loop animation: animate to end, then jump to start after a pause
+      _marqueeTimer = Timer.periodic(_marqueeScrollDuration + _marqueeDelay, (_) async {
+        if (!mounted) return;
+        try {
+          await _catatanPreviewController.animateTo(
+            _catatanPreviewController.position.maxScrollExtent,
+            duration: _marqueeScrollDuration,
+            curve: Curves.linear,
+          );
+          // small pause
+          await Future.delayed(_marqueeDelay);
+          if (!mounted) return;
+          _catatanPreviewController.jumpTo(0);
+        } catch (e) {
+          print('DEBUG marquee error: $e');
+        }
+      });
+      _marqueeAnimating = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    _marqueeTimer?.cancel();
+    _catatanPreviewController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -153,333 +273,416 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
             stops: [0.1, 0.4, 0.8, 1.0],
           ),
         ),
-        child: CustomScrollView(
-          slivers: [
-            SliverAppBar(
-              expandedHeight: 200.0,
-              floating: false,
-              pinned: true,
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              flexibleSpace: FlexibleSpaceBar(
-                centerTitle: true,
-                titlePadding: const EdgeInsets.only(bottom: 16.0),
-                title: Text(
-                  'Dashboard Guru',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                background: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFF3E8BCB),
-                        Color(0xFF6DA2D9),
-                      ],
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await _fetchInitialLastKehadiran();
+            await _checkGuruClass();
+            await _fetchLatestCatatanPreview();
+          },
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverAppBar(
+                expandedHeight: 200.0,
+                floating: false,
+                pinned: true,
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                flexibleSpace: FlexibleSpaceBar(
+                  centerTitle: true,
+                  titlePadding: const EdgeInsets.only(bottom: 16.0),
+                  title: Text(
+                    'Dashboard Guru',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Image.asset(
-                          'assets/logo.png',
-                          height: 80,
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Selamat Datang, ${widget.guru.nama.split(' ')[0]}',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          '${widget.guru.nipy}',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
-                            color: Colors.white70,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              actions: [
-                IconButton(
-                  icon: const Icon(Icons.logout, color: Colors.white),
-                  onPressed: _logout,
-                  tooltip: 'Logout',
-                ),
-              ],
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.all(16.0),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate(
-                  [
-                    Card(
-                      elevation: 8,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(25.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Informasi Guru',
-                              style: GoogleFonts.poppins(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blueAccent,
-                              ),
-                            ),
-                            const Divider(height: 20, thickness: 1),
-                            // Menampilkan informasi guru
-                            _buildInfoRow(Icons.badge, 'NIPY', widget.guru.nipy),
-                            _buildInfoRow(Icons.person, 'Nama', widget.guru.nama),
-                            // Baris ini diperbaiki dengan operator ??
-                            _buildInfoRow(Icons.work, 'Ket ', widget.guru.ket ?? 'Tidak ada keterangan'),
-                            _buildInfoRow(Icons.email, 'Email', widget.guru.email ?? 'tak ada'),
-                          ],
-                        ),
+                  background: Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0xFF3E8BCB),
+                          Color(0xFF6DA2D9),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 20),
-
-                    // Menampilkan status kehadiran terakhir
-                    if (_lastKehadiran != null)
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Image.asset(
+                            'assets/logo.png',
+                            height: 80,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Selamat Datang, ${widget.guru.nama.split(' ')[0]}',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            '${widget.guru.nipy}',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              color: Colors.white70,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.logout, color: Colors.white),
+                    onPressed: _logout,
+                    tooltip: 'Logout',
+                  ),
+                ],
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.all(16.0),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate(
+                    [
                       Card(
                         elevation: 8,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        color: _lastKehadiran!.status == 'MASUK'
-                            ? Colors.green.shade50
-                            : Colors.red.shade50,
                         child: Padding(
                           padding: const EdgeInsets.all(25.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Status Kehadiran Terakhir',
+                                'Informasi Guru',
                                 style: GoogleFonts.poppins(
                                   fontSize: 22,
                                   fontWeight: FontWeight.bold,
-                                  color: _lastKehadiran!.status == 'MASUK' ? Colors.green[700] : Colors.red[700],
+                                  color: Colors.blueAccent,
                                 ),
                               ),
                               const Divider(height: 20, thickness: 1),
-                              Row(
-                                children: [
-                                  Icon(
-                                    _lastKehadiran!.status == 'MASUK' ? Icons.check_circle_outline : Icons.highlight_off,
-                                    color: _lastKehadiran!.status == 'MASUK' ? Colors.green : Colors.red,
-                                    size: 30,
-                                  ),
-                                  const SizedBox(width: 15),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Status: ${_lastKehadiran!.status}',
-                                          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18),
-                                        ),
-                                        Text(
-                                          'Waktu: ${_formatDateTime(_lastKehadiran!.waktuTap)}',
-                                          style: GoogleFonts.poppins(color: Colors.grey[700], fontSize: 16),
-                                          softWrap: true,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      Card(
-                        elevation: 8,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        color: Colors.blue.shade50,
-                        child: Padding(
-                          padding: const EdgeInsets.all(25.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Icon(Icons.info_outline, size: 40, color: Colors.blueAccent),
-                              const SizedBox(height: 10),
-                              Text(
-                                'Tidak ada data kehadiran terakhir.',
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.poppins(
-                                  fontSize: 16,
-                                  color: Colors.blueGrey[700],
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: _fetchInitialLastKehadiran,
-                                child: Text(
-                                  'Coba Muat Ulang',
-                                  style: GoogleFonts.poppins(color: Colors.blueAccent),
-                                ),
-                              ),
+                              // Menampilkan informasi guru
+                              _buildInfoRow(Icons.badge, 'NIPY', widget.guru.nipy),
+                              _buildInfoRow(Icons.person, 'Nama', widget.guru.nama),
+                              // Baris ini diperbaiki dengan operator ??
+                              _buildInfoRow(Icons.work, 'Ket ', widget.guru.ket ?? 'Tidak ada keterangan'),
+                              _buildInfoRow(Icons.email, 'Email', widget.guru.email ?? 'tak ada'),
                             ],
                           ),
                         ),
                       ),
-                    const SizedBox(height: 30),
+                      const SizedBox(height: 20),
 
-                    // Grid menu untuk guru
-                    GridView.count(
-                      physics: const NeverScrollableScrollPhysics(),
-                      shrinkWrap: true,
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 15,
-                      mainAxisSpacing: 15,
-                      children: [
-                        _buildDashboardCard(
-                          context,
-                          title: 'Lihat Jadwal',
-                          icon: Icons.calendar_today,
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF4CAF50), Color(0xFF8BC34A)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const JadwalScreen()),
-                            );
-                          },
-                        ),
-                        _buildDashboardCard(
-                          context,
-                          title: 'Riwayat Kehadiran',
-                          icon: Icons.history,
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFFA726), Color(0xFFFFCC80)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => RiwayatKehadiranGuruScreen(
-                                  nipy: widget.guru.nipy,
+                      // Menampilkan status kehadiran terakhir
+                      if (_lastKehadiran != null)
+                        Card(
+                          elevation: 8,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          color: _lastKehadiran!.status == 'MASUK'
+                              ? Colors.green.shade50
+                              : Colors.red.shade50,
+                          child: Padding(
+                            padding: const EdgeInsets.all(25.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Status Kehadiran Terakhir',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: _lastKehadiran!.status == 'MASUK' ? Colors.green[700] : Colors.red[700],
+                                  ),
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-                        _buildDashboardCard(
-                          context,
-                          title: 'Catatan Guru',
-                          icon: Icons.sticky_note_2,
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF2196F3), Color(0xFF90CAF9)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => CatatanGuruScreen(nipy: widget.guru.nipy),
-                              ),
-                            );
-                          },
-                        ),
-                        // Menu "Kelas" dengan logika kondisional
-                        if (_isLoadingKelas)
-                          _buildLoadingCard()
-                        else
-                          _buildDashboardCard(
-                            context,
-                            title: 'Kelas',
-                            icon: Icons.class_outlined,
-                            gradient: _guruKelas != null
-                                ? const LinearGradient(
-                                  colors: [Color(0xFF9CCC65), Color(0xFFAED581)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                )
-                                : const LinearGradient(
-                                  colors: [Color(0xFFB0BEC5), Color(0xFFCFD8DC)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                            onTap: _guruKelas != null
-                                ? () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => KelasScreen(namaKelas: _guruKelas!.namaKelas),
+                                const Divider(height: 20, thickness: 1),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      _lastKehadiran!.status == 'MASUK' ? Icons.check_circle_outline : Icons.highlight_off,
+                                      color: _lastKehadiran!.status == 'MASUK' ? Colors.green : Colors.red,
+                                      size: 30,
                                     ),
-                                  );
-                                }
-                                : () {
-                                  // Beri tahu pengguna jika guru tidak memiliki kelas.
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Anda belum ditugaskan sebagai wali kelas.',
-                                        style: GoogleFonts.poppins(color: Colors.white),
+                                    const SizedBox(width: 15),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Status: ${_lastKehadiran!.status}',
+                                            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18),
+                                          ),
+                                          Text(
+                                            'Waktu: ${_formatDateTime(_lastKehadiran!.waktuTap)}',
+                                            style: GoogleFonts.poppins(color: Colors.grey[700], fontSize: 16),
+                                            softWrap: true,
+                                          ),
+                                        ],
                                       ),
-                                      backgroundColor: Colors.red,
                                     ),
-                                  );
-                                },
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
-                        // Tambahkan menu Rekap Presensi jika guru adalah wali kelas
-                        if (_guruKelas != null)
+                        )
+                      else
+                        Card(
+                          elevation: 8,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          color: Colors.blue.shade50,
+                          child: Padding(
+                            padding: const EdgeInsets.all(25.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Icon(Icons.info_outline, size: 40, color: Colors.blueAccent),
+                                const SizedBox(height: 10),
+                                Text(
+                                  'Tidak ada data kehadiran terakhir.',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    color: Colors.blueGrey[700],
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: _fetchInitialLastKehadiran,
+                                  child: Text(
+                                    'Coba Muat Ulang',
+                                    style: GoogleFonts.poppins(color: Colors.blueAccent),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+                      // --- New: Preview Catatan Terakhir (marquee) ---
+                      // if (_lastNotePreview.isNotEmpty)
+                      //   Card(
+                      //     elevation: 4,
+                      //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      //     child: Padding(
+                      //       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      //       child: Column(
+                      //         crossAxisAlignment: CrossAxisAlignment.start,
+                      //         children: [
+                      //           Text(
+                      //             'Preview Catatan Terakhir',
+                      //             style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
+                      //           ),
+                      //           const SizedBox(height: 8),
+                      //           SizedBox(
+                      //             height: 36,
+                      //             child: Row(
+                      //               children: [
+                      //                 const Icon(Icons.sticky_note_2, color: Colors.blueAccent),
+                      //                 const SizedBox(width: 8),
+                      //                 Expanded(
+                      //                   child: ClipRect(
+                      //                     child: SingleChildScrollView(
+                      //                       controller: _catatanPreviewController,
+                      //                       scrollDirection: Axis.horizontal,
+                      //                       physics: const NeverScrollableScrollPhysics(),
+                      //                       child: Text(
+                      //                         _lastNotePreview,
+                      //                         style: GoogleFonts.poppins(fontSize: 14, color: Colors.black87),
+                      //                       ),
+                      //                     ),
+                      //                   ),
+                      //                 ),
+                      //               ],
+                      //             ),
+                      //           ),
+                      //         ],
+                      //       ),
+                      //     ),
+                      //   ),
+                      // --- end new ---
+                      const SizedBox(height: 20),
+
+                      // Grid menu untuk guru
+                      GridView.count(
+                        physics: const NeverScrollableScrollPhysics(),
+                        shrinkWrap: true,
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 15,
+                        mainAxisSpacing: 15,
+                        children: [
                           _buildDashboardCard(
                             context,
-                            title: 'Rekap Presensi',
-                            icon: Icons.bar_chart,
+                            title: 'Lihat Jadwal',
+                            icon: Icons.calendar_today,
                             gradient: const LinearGradient(
-                              colors: [Color(0xFF42A5F5), Color(0xFF64B5F6)],
+                              colors: [Color(0xFF4CAF50), Color(0xFF8BC34A)],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
                             onTap: () {
-                              // Ganti dengan navigasi ke halaman rekap presensi yang Anda miliki
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const JadwalScreen()),
+                              );
+                            },
+                          ),
+                          _buildDashboardCard(
+                            context,
+                            title: 'Riwayat Kehadiran',
+                            icon: Icons.history,
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFFA726), Color(0xFFFFCC80)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            onTap: () {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => RekapPresensiScreen(
-                                    namaKelas: _guruKelas!.namaKelas,
+                                  builder: (context) => RiwayatKehadiranGuruScreen(
+                                    nipy: widget.guru.nipy,
                                   ),
                                 ),
                               );
                             },
                           ),
-                      ],
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: VersionDisplay(),
-                    ),
-                  ],
+                          _buildDashboardCard(
+                            context,
+                            title: 'Catatan Guru',
+                            icon: Icons.sticky_note_2,
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF2196F3), Color(0xFF90CAF9)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => CatatanGuruScreen(nipy: widget.guru.nipy),
+                                ),
+                              );
+                            },
+                            // Tambahkan child untuk preview running text
+                            child: (_lastNotePreview.isNotEmpty)
+                                ? Padding(
+                                    padding: const EdgeInsets.only(top: 8.0),
+                                    child: SizedBox(
+                                      height: 24,
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.chevron_right, color: Colors.white70, size: 18),
+                                          Expanded(
+                                            child: ClipRect(
+                                              child: SingleChildScrollView(
+                                                controller: _catatanPreviewController,
+                                                scrollDirection: Axis.horizontal,
+                                                physics: const NeverScrollableScrollPhysics(),
+                                                child: Text(
+                                                  _lastNotePreview,
+                                                  style: GoogleFonts.poppins(fontSize: 13, color: Colors.white),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          // Menu "Kelas" dengan logika kondisional
+                          if (_isLoadingKelas)
+                            _buildLoadingCard()
+                          else
+                            _buildDashboardCard(
+                              context,
+                              title: 'Kelas',
+                              icon: Icons.class_outlined,
+                              gradient: _guruKelas != null
+                                  ? const LinearGradient(
+                                    colors: [Color(0xFF9CCC65), Color(0xFFAED581)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  )
+                                  : const LinearGradient(
+                                    colors: [Color(0xFFB0BEC5), Color(0xFFCFD8DC)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                              onTap: _guruKelas != null
+                                  ? () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => KelasScreen(namaKelas: _guruKelas!.namaKelas),
+                                      ),
+                                    );
+                                  }
+                                  : () {
+                                    // Beri tahu pengguna jika guru tidak memiliki kelas.
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Anda bukan Wali Kelas',
+                                          style: GoogleFonts.poppins(color: Colors.white),
+                                        ),
+                                        backgroundColor: Colors.red,
+                                        action: _kelasErrorMessage != null ? SnackBarAction(
+                                          label: 'Detil',
+                                          textColor: Colors.white,
+                                          onPressed: _showKelasErrorDialog,
+                                        ) : null,
+                                      ),
+                                    );
+                                  },
+                            ),
+                          // Tambahkan menu Rekap Presensi jika guru adalah wali kelas
+                          if (_guruKelas != null)
+                            _buildDashboardCard(
+                              context,
+                              title: 'Rekap Presensi',
+                              icon: Icons.bar_chart,
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF42A5F5), Color(0xFF64B5F6)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              onTap: () {
+                                // Ganti dengan navigasi ke halaman rekap presensi yang Anda miliki
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => RekapPresensiScreen(
+                                      namaKelas: _guruKelas!.namaKelas,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                        ],
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: VersionDisplay(),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -528,12 +731,12 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
     required String title,
     required IconData icon,
     required LinearGradient gradient,
-    required VoidCallback? onTap, // onTap bisa null
+    required VoidCallback? onTap,
+    Widget? child, // <-- tambahkan child opsional
   }) {
-    // Tentukan warna ikon dan teks berdasarkan apakah kartu bisa diklik
     Color iconColor = onTap != null ? Colors.white : Colors.white70;
     Color textColor = onTap != null ? Colors.white : Colors.white70;
-    
+
     return Card(
       elevation: 8,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -561,6 +764,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                     color: textColor,
                   ),
                 ),
+                if (child != null) child, // <-- tampilkan preview jika ada
               ],
             ),
           ),

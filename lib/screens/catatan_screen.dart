@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:table_calendar/table_calendar.dart';
 import '../models/catatan.dart';
 import '../services/api_service.dart';
 
@@ -31,6 +32,10 @@ class _CatatanScreenState extends State<CatatanScreen> {
   int _totalCatatan = 0;
   int _catatanBulanIni = 0;
 
+  // Tanggal yang memiliki catatan (hanya tanggal bagian date, tanpa waktu)
+  Set<DateTime> _datesWithNotes = {};
+  DateTime _focusedDay = DateTime.now();
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +46,8 @@ class _CatatanScreenState extends State<CatatanScreen> {
     _fetchCatatanAndSetState(_selectedDate);
     // Memuat statistik catatan saat pertama kali widget diinisialisasi
     _fetchCatatanStatistics();
+    // Ambil tanggal yang punya catatan untuk bulan ini
+    _fetchDatesWithNotes(_focusedDay);
   }
 
   @override
@@ -70,7 +77,10 @@ class _CatatanScreenState extends State<CatatanScreen> {
           if (catatan != null) {
             _catatanController.text = catatan.catatanText;
             _initialNote = catatan.catatanText;
-            print('DEBUG: Catatan berhasil dimuat. Teks catatan: ${_catatanController.text.substring(0, 10)}...');
+            final preview = _catatanController.text.length > 10
+                ? '${_catatanController.text.substring(0, 10)}...'
+                : _catatanController.text;
+            print('DEBUG: Catatan berhasil dimuat. Teks catatan (preview): $preview');
           } else {
             _catatanController.clear();
             _initialNote = '';
@@ -134,6 +144,29 @@ class _CatatanScreenState extends State<CatatanScreen> {
           ),
         );
       }
+    }
+  }
+
+  // Ambil daftar tanggal yang punya catatan untuk bulan fokus (server-side API harus ada)
+  Future<void> _fetchDatesWithNotes(DateTime focusedMonth) async {
+    try {
+      final year = focusedMonth.year;
+      final month = focusedMonth.month;
+      // API harus mengembalikan list tanggal dalam format 'yyyy-MM-dd' atau epoch
+      final List<String> dates = await _apiService.getDatesWithNotes(widget.nis, year, month);
+      // Parse dan simpan ke set (normalize ke tengah hari)
+      final Set<DateTime> setDates = dates.map((s) {
+        final d = DateTime.parse(s);
+        return DateTime(d.year, d.month, d.day);
+      }).toSet();
+      if (mounted) {
+        setState(() {
+          _datesWithNotes = setDates;
+        });
+      }
+    } catch (e) {
+      print('DEBUG: Gagal memuat tanggal berisi catatan: $e');
+      // tidak perlu memaksa UI, cukup log
     }
   }
 
@@ -390,6 +423,82 @@ class _CatatanScreenState extends State<CatatanScreen> {
               ),
               const SizedBox(height: 20),
               
+              // --- NEW: Calendar with marked dates ---
+              Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
+                  child: TableCalendar(
+                    firstDay: DateTime.utc(2000, 1, 1),
+                    lastDay: DateTime.utc(2100, 12, 31),
+                    focusedDay: _focusedDay,
+                    locale: 'id_ID',
+                    calendarFormat: CalendarFormat.month,
+                    availableGestures: AvailableGestures.horizontalSwipe,
+                    selectedDayPredicate: (day) => isSameDay(day, _selectedDate),
+                    onDaySelected: (selectedDay, focusedDay) async {
+                      if (!isSameDay(_selectedDate, selectedDay)) {
+                        setState(() {
+                          _selectedDate = selectedDay;
+                          _focusedDay = focusedDay;
+                          _isLoading = true;
+                        });
+                        await _fetchCatatanAndSetState(selectedDay);
+                        // optionally refresh dates for newly focused month
+                        await _fetchDatesWithNotes(focusedDay);
+                      }
+                    },
+                    onPageChanged: (focusedDay) {
+                      _focusedDay = focusedDay;
+                      // Muat tanggal berisi catatan saat user pindah bulan
+                      _fetchDatesWithNotes(focusedDay);
+                    },
+                    calendarBuilders: CalendarBuilders(
+                      defaultBuilder: (context, day, focusedDay) {
+                        final hasNote = _datesWithNotes.contains(DateTime(day.year, day.month, day.day));
+                        if (hasNote) {
+                          return Container(
+                            margin: const EdgeInsets.all(6.0),
+                            decoration: BoxDecoration(
+                              color: Colors.lightBlue.shade100,
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text('${day.day}', style: TextStyle(color: Colors.black87)),
+                          );
+                        }
+                        return null;
+                      },
+                      todayBuilder: (context, day, focusedDay) {
+                        final hasNote = _datesWithNotes.contains(DateTime(day.year, day.month, day.day));
+                        return Container(
+                          margin: const EdgeInsets.all(6.0),
+                          decoration: BoxDecoration(
+                            color: hasNote ? Colors.lightBlue.shade200 : Colors.blueAccent,
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text('${day.day}', style: const TextStyle(color: Colors.white)),
+                        );
+                      },
+                      selectedBuilder: (context, day, focusedDay) {
+                        return Container(
+                          margin: const EdgeInsets.all(6.0),
+                          decoration: BoxDecoration(
+                            color: Colors.blueAccent,
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text('${day.day}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
               // Bagian Card untuk menampilkan statistik
               _buildStatisticsCard(),
               const SizedBox(height: 20),
@@ -415,6 +524,7 @@ class _CatatanScreenState extends State<CatatanScreen> {
                               style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500),
                             ),
                           ),
+                          // You can keep the calendar icon as alternative picker
                           IconButton(
                             icon: const Icon(Icons.calendar_today, color: Colors.blueAccent),
                             onPressed: () async {
@@ -426,7 +536,6 @@ class _CatatanScreenState extends State<CatatanScreen> {
                               );
                               if (picked != null && picked != _selectedDate) {
                                 if (!mounted) return;
-                                // Tampilkan dialog konfirmasi
                                 await showDialog(
                                   context: context,
                                   builder: (context) => AlertDialog(
@@ -436,24 +545,16 @@ class _CatatanScreenState extends State<CatatanScreen> {
                                       style: GoogleFonts.poppins(),
                                     ),
                                     actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.of(context).pop(),
-                                        child: Text('Batal', style: GoogleFonts.poppins(color: Colors.red)),
-                                      ),
-                                      TextButton(
-                                        onPressed: () {
-                                          print('DEBUG: Tombol "Lihat" di dialog ditekan.');
-                                          setState(() {
-                                            _selectedDate = picked;
-                                            _catatanController.clear();
-                                            _isLoading = true;
-                                            print('DEBUG: setState() dipanggil. _isLoading = true, teks catatan dikosongkan.');
-                                          });
-                                          Navigator.of(context).pop();
-                                          _fetchCatatanAndSetState(picked);
-                                        },
-                                        child: Text('Lihat', style: GoogleFonts.poppins()),
-                                      ),
+                                      TextButton(onPressed: () => Navigator.of(context).pop(), child: Text('Batal', style: GoogleFonts.poppins(color: Colors.red))),
+                                      TextButton(onPressed: () {
+                                        setState(() {
+                                          _selectedDate = picked;
+                                          _catatanController.clear();
+                                          _isLoading = true;
+                                        });
+                                        Navigator.of(context).pop();
+                                        _fetchCatatanAndSetState(picked);
+                                      }, child: Text('Lihat', style: GoogleFonts.poppins())),
                                     ],
                                   ),
                                 );

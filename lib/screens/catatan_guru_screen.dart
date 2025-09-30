@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:table_calendar/table_calendar.dart';
 import '../models/catatan_guru.dart';
 import '../services/api_service.dart';
 
@@ -33,6 +34,10 @@ class _CatatanGuruScreenState extends State<CatatanGuruScreen> {
   int _totalCatatan = 0;
   int _catatanBulanIni = 0;
 
+  // Tambahkan variabel untuk menyimpan tanggal yang memiliki catatan
+  Set<DateTime> _datesWithNotes = {};
+  DateTime _focusedDay = DateTime.now();
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +48,8 @@ class _CatatanGuruScreenState extends State<CatatanGuruScreen> {
     _fetchCatatanAndSetState(_selectedDate);
     // Memuat statistik catatan saat pertama kali widget diinisialisasi
     _fetchCatatanStatistics();
+    // Ambil daftar tanggal yang punya catatan guru untuk bulan fokus
+    _fetchDatesWithNotesGuru(_focusedDay);
   }
 
   @override
@@ -55,24 +62,24 @@ class _CatatanGuruScreenState extends State<CatatanGuruScreen> {
   // Metode untuk mengambil catatan dari server dan memperbarui state.
   Future<void> _fetchCatatanAndSetState(DateTime date) async {
     if (!mounted) return;
-    
     print('DEBUG: _fetchCatatanAndSetState() dipanggil untuk tanggal ${date.toIso8601String()}');
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() { _isLoading = true; });
 
     try {
       final String formattedDate = DateFormat('yyyy-MM-dd').format(date);
-      print('DEBUG: Memulai panggilan API getCatatan untuk NIPY ${widget.nipy} dan tanggal $formattedDate');
+      print('DEBUG: Memulai panggilan API getCatatanGuru untuk NIPY ${widget.nipy} dan tanggal $formattedDate');
       final catatanguru = await _apiService.getCatatanGuru(widget.nipy, formattedDate);
-      
+
       if (mounted) {
         setState(() {
           print('DEBUG: setState() dipanggil untuk memperbarui catatan dan menonaktifkan loading.');
           if (catatanguru != null) {
             _catatanController.text = catatanguru.catatanText;
             _initialNote = catatanguru.catatanText;
-            print('DEBUG: Catatan berhasil dimuat. Teks catatan: ${_catatanController.text.substring(0, 10)}...');
+            final preview = _catatanController.text.length > 10
+                ? '${_catatanController.text.substring(0, 10)}...'
+                : _catatanController.text;
+            print('DEBUG: Catatan berhasil dimuat. Teks catatan (preview): $preview');
           } else {
             _catatanController.clear();
             _initialNote = '';
@@ -92,9 +99,7 @@ class _CatatanGuruScreenState extends State<CatatanGuruScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false; // Nonaktifkan loading meskipun ada error
-        });
+        setState(() { _isLoading = false; }); // Nonaktifkan loading meskipun ada error
         print('DEBUG: Terjadi error saat memuat catatan: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -106,6 +111,28 @@ class _CatatanGuruScreenState extends State<CatatanGuruScreen> {
           ),
         );
       }
+    }
+  }
+
+  // Ambil daftar tanggal yang punya catatan guru untuk bulan fokus
+  Future<void> _fetchDatesWithNotesGuru(DateTime focusedMonth) async {
+    try {
+      final year = focusedMonth.year;
+      final month = focusedMonth.month;
+      print('DEBUG: requesting datesWithNotes for nipy=${widget.nipy} year=$year month=$month');
+      final List<String> dates = await _apiService.getDatesWithNotesGuru(widget.nipy, year, month);
+      print('DEBUG: received dates: $dates');
+      final Set<DateTime> setDates = dates.map((s) {
+        final d = DateTime.parse(s);
+        return DateTime(d.year, d.month, d.day);
+      }).toSet();
+      if (mounted) {
+        setState(() {
+          _datesWithNotes = setDates;
+        });
+      }
+    } catch (e) {
+      print('DEBUG: Gagal memuat tanggal berisi catatan guru: $e');
     }
   }
 
@@ -394,6 +421,90 @@ class _CatatanGuruScreenState extends State<CatatanGuruScreen> {
               // Bagian Card untuk menampilkan statistik
               _buildStatisticsCard(),
               const SizedBox(height: 20),
+
+              // -- Tambahkan Calendar yang menandai tanggal berisi catatan guru --
+              Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 8.0),
+                  child: SizedBox(
+                    height: 360, // pastikan kalender terlihat di SingleChildScrollView
+                    child: TableCalendar(
+                      firstDay: DateTime.utc(2000, 1, 1),
+                      lastDay: DateTime.utc(2100, 12, 31),
+                      focusedDay: _focusedDay,
+                      locale: 'id_ID',
+                      calendarFormat: CalendarFormat.month,
+                      selectedDayPredicate: (day) => isSameDay(day, _selectedDate),
+                      onDaySelected: (selectedDay, focusedDay) async {
+                        if (!isSameDay(_selectedDate, selectedDay)) {
+                          setState(() {
+                            _selectedDate = selectedDay;
+                            _focusedDay = focusedDay;
+                            _isLoading = true;
+                          });
+                          await _fetchCatatanAndSetState(selectedDay);
+                          await _fetchDatesWithNotesGuru(focusedDay);
+                        }
+                      },
+                      onPageChanged: (focusedDay) {
+                        _focusedDay = focusedDay;
+                        _fetchDatesWithNotesGuru(focusedDay);
+                      },
+                      calendarBuilders: CalendarBuilders(
+                        defaultBuilder: (context, day, focusedDay) {
+                          final hasNote = _datesWithNotes.contains(DateTime(day.year, day.month, day.day));
+                          if (hasNote) {
+                            return Container(
+                              margin: const EdgeInsets.all(6.0),
+                              decoration: BoxDecoration(
+                                color: Colors.lightBlue.shade100,
+                                borderRadius: BorderRadius.circular(8.0),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text('${day.day}', style: const TextStyle(color: Colors.black87)),
+                            );
+                          }
+                          return null;
+                        },
+                        todayBuilder: (context, day, focusedDay) {
+                          final hasNote = _datesWithNotes.contains(DateTime(day.year, day.month, day.day));
+                          return Container(
+                            margin: const EdgeInsets.all(6.0),
+                            decoration: BoxDecoration(
+                              color: hasNote ? Colors.lightBlue.shade200 : Colors.blueAccent,
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text('${day.day}', style: const TextStyle(color: Colors.white)),
+                          );
+                        },
+                        selectedBuilder: (context, day, focusedDay) {
+                          return Container(
+                            margin: const EdgeInsets.all(6.0),
+                            decoration: BoxDecoration(
+                              color: Colors.blueAccent,
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text('${day.day}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (_datesWithNotes.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Text(
+                    'Tidak ada catatan di bulan ini (debug). Cek console atau endpoint.',
+                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
 
               Card(
                 elevation: 5,

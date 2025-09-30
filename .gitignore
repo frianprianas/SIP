@@ -43,3 +43,20 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Sensitive files and credentials
+*.json
+!google-services.json
+!package.json
+!package-lock.json
+api_key.txt
+fcm_key.txt
+**/notif/
+**/*-firebase-adminsdk-*.json
+key.jks
+test_cert.pem
+*.pem
+*.key
+*.p12
+local.properties
+android/key.properties

@@ -140,7 +140,7 @@ class _CatatanGuruScreenState extends State<CatatanGuruScreen> {
   Future<void> _fetchCatatanStatistics() async {
     if (!mounted) return;
     try {
-      print('DEBUG: Memuat statistik catatan guru...');
+      print('DEBUG: Memuat statistik catatan guru untuk NIPY: ${widget.nipy}...');
       final Map<String, dynamic> stats = await _apiService.getCatatanGuruStatistics(widget.nipy);
       if (mounted) {
         setState(() {
@@ -152,6 +152,11 @@ class _CatatanGuruScreenState extends State<CatatanGuruScreen> {
     } catch (e) {
       print('DEBUG: Gagal memuat statistik catatan: $e');
       if (mounted) {
+        // Reset ke 0 jika error
+        setState(() {
+          _totalCatatan = 0;
+          _catatanBulanIni = 0;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -213,7 +218,9 @@ class _CatatanGuruScreenState extends State<CatatanGuruScreen> {
             ),
           );
           // Perbarui statistik setelah menyimpan catatan
-          _fetchCatatanStatistics();
+          await _fetchCatatanStatistics();
+          // Perbarui kalender untuk menampilkan tanggal yang memiliki catatan
+          await _fetchDatesWithNotesGuru(_focusedDay);
         } else {
           print('DEBUG: Catatan gagal disimpan. Pesan: ${response['message']}');
           ScaffoldMessenger.of(context).showSnackBar(
@@ -289,7 +296,9 @@ class _CatatanGuruScreenState extends State<CatatanGuruScreen> {
             ),
           );
           // Perbarui statistik setelah menghapus catatan
-          _fetchCatatanStatistics();
+          await _fetchCatatanStatistics();
+          // Perbarui kalender untuk menampilkan tanggal yang memiliki catatan
+          await _fetchDatesWithNotesGuru(_focusedDay);
         } else {
           print('DEBUG: Gagal menghapus catatan. Pesan: ${response['message']}');
           ScaffoldMessenger.of(context).showSnackBar(

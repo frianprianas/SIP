@@ -256,7 +256,7 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
                 ],
               ),
               SliverPadding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(12.0),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate(
                     [
@@ -264,7 +264,7 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
                         elevation: 8,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                         child: Padding(
-                          padding: const EdgeInsets.all(25.0),
+                          padding: const EdgeInsets.all(20.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -295,7 +295,7 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
                               ? Colors.green.shade50
                               : Colors.red.shade50,
                           child: Padding(
-                            padding: const EdgeInsets.all(25.0),
+                            padding: const EdgeInsets.all(20.0),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -311,7 +311,7 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
                                 Row(
                                   children: [
                                     Icon(
-                                      _lastKehadiran!.status == 'MASUK' ? Icons.check_circle_outline : Icons.highlight_off,
+                                      _lastKehadiran!.status == 'MASUK' ? Icons.login : Icons.logout,
                                       color: _lastKehadiran!.status == 'MASUK' ? Colors.green : Colors.red,
                                       size: 30,
                                     ),
@@ -344,7 +344,7 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                           color: Colors.blue.shade50,
                           child: Padding(
-                            padding: const EdgeInsets.all(25.0),
+                            padding: const EdgeInsets.all(20.0),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
@@ -369,7 +369,7 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
                             ),
                           ),
                         ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 20),
 
                       GridView.count(
                         physics: const NeverScrollableScrollPhysics(),
@@ -482,7 +482,7 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
                       ),
                       // Widget versi aplikasi ditambahkan di sini
                       const Padding(
-                        padding: EdgeInsets.all(16.0),
+                        padding: EdgeInsets.all(8.0),
                         child: VersionDisplay(),
                       ),
                     ],

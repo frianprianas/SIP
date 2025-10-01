@@ -390,7 +390,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                 ],
               ),
               SliverPadding(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(12.0),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate(
                     [
@@ -398,7 +398,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                         elevation: 8,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                         child: Padding(
-                          padding: const EdgeInsets.all(25.0),
+                          padding: const EdgeInsets.all(20.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -432,7 +432,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                               ? Colors.green.shade50
                               : Colors.red.shade50,
                           child: Padding(
-                            padding: const EdgeInsets.all(25.0),
+                            padding: const EdgeInsets.all(20.0),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -481,7 +481,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                           color: Colors.blue.shade50,
                           child: Padding(
-                            padding: const EdgeInsets.all(25.0),
+                            padding: const EdgeInsets.all(20.0),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [

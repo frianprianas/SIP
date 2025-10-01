@@ -44,12 +44,18 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
   final Duration _marqueeScrollDuration = const Duration(seconds: 6);
   // --- end new ---
 
+  // --- New: preview riwayat kehadiran ---
+  List<KehadiranGuru> _recentKehadiran = [];
+  String _riwayatPreview = '';
+  // --- end new ---
+
   @override
   void initState() {
     super.initState();
     _fetchInitialLastKehadiran();
     _checkGuruClass();
     _fetchLatestCatatanPreview(); // load preview on init
+    _fetchRecentRiwayatKehadiran(); // load riwayat preview
   }
 
   /// Mengambil data kehadiran guru terakhir dari API.
@@ -184,6 +190,16 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
     }
   }
 
+  String _formatDate(String dateTimeString) {
+    try {
+      DateTime dt = DateTime.parse(dateTimeString);
+      return '${dt.day.toString().padLeft(2, '0')}-${dt.month.toString().padLeft(2, '0')}';
+    } catch (e) {
+      print('Error parsing date: $e for string: $dateTimeString');
+      return 'Invalid Date';
+    }
+  }
+
   // Fetch latest catatan for guru and start marquee if needed
   Future<void> _fetchLatestCatatanPreview() async {
     try {
@@ -249,6 +265,28 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
     });
   }
 
+  /// Mengambil beberapa riwayat kehadiran terakhir untuk preview
+  Future<void> _fetchRecentRiwayatKehadiran() async {
+    try {
+      final riwayatList = await _apiService.getRiwayatKehadiranGuru(
+        widget.guru.nipy,
+        limit: 3, // Ambil 3 data terakhir untuk preview
+      );
+      if (mounted && riwayatList.isNotEmpty) {
+        setState(() {
+          _recentKehadiran = riwayatList;
+          // Buat preview text dari 3 kehadiran terakhir
+          _riwayatPreview = riwayatList.map((kehadiran) {
+            final date = _formatDate(kehadiran.waktuTap);
+            return '$date: ${kehadiran.status}';
+          }).join(' • ');
+        });
+      }
+    } catch (e) {
+      print('Error fetching recent riwayat kehadiran: $e');
+    }
+  }
+
   @override
   void dispose() {
     _marqueeTimer?.cancel();
@@ -292,7 +330,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                   centerTitle: true,
                   titlePadding: const EdgeInsets.only(bottom: 16.0),
                   title: Text(
-                    'Dashboard Guru',
+                    'Dashboard Guru/Tendik',
                     style: GoogleFonts.poppins(
                       color: Colors.white,
                       fontSize: 20,
@@ -410,7 +448,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                                 Row(
                                   children: [
                                     Icon(
-                                      _lastKehadiran!.status == 'MASUK' ? Icons.check_circle_outline : Icons.highlight_off,
+                                      _lastKehadiran!.status == 'MASUK' ? Icons.login : Icons.logout,
                                       color: _lastKehadiran!.status == 'MASUK' ? Colors.green : Colors.red,
                                       size: 30,
                                     ),
@@ -556,6 +594,21 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                                 ),
                               );
                             },
+                            child: _riwayatPreview.isNotEmpty
+                                ? Padding(
+                                    padding: const EdgeInsets.only(top: 8.0),
+                                    child: Text(
+                                      _riwayatPreview,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: Colors.white70,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  )
+                                : null,
                           ),
                           _buildDashboardCard(
                             context,

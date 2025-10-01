@@ -32,6 +32,10 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
   final Duration _marqueeDelay = const Duration(milliseconds: 800);
   final Duration _marqueeScrollDuration = const Duration(seconds: 6);
 
+  // Preview riwayat presensi
+  List<Kehadiran> _recentPresensi = [];
+  String _riwayatPreview = '';
+
   @override
   void initState() {
     super.initState();

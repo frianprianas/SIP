@@ -1,12 +1,12 @@
 <?php
-// sip/catatan/delete_catatan.php
-// Endpoint untuk menghapus catatan siswa
+// api/catatan_guru/delete_catatan.php
+// Endpoint untuk menghapus catatan guru
 
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 header('Content-Type: application/json');
 
-require_once '../koneksi.php'; // Sesuaikan path ke file koneksi.php Anda
+require_once '../../koneksi.php'; // Path yang benar ke koneksi.php
 
 function respondWithJson($status, $message, $data = []) {
     global $conn;

@@ -18,23 +18,32 @@ function respondWithJson($status, $message, $data = []) {
 }
 
 try {
-    // Dapatkan total catatan
-    $totalStmt = $conn->prepare("SELECT COUNT(*) AS total FROM catatan");
+    // Validasi parameter NIS
+    if (!isset($_GET['nis']) || empty($_GET['nis'])) {
+        respondWithJson("ERROR", "Parameter NIS diperlukan.");
+    }
+    
+    $nis = $_GET['nis'];
+    
+    // Dapatkan total catatan untuk siswa ini
+    $totalStmt = $conn->prepare("SELECT COUNT(*) AS total FROM catatan WHERE nis = ?");
     if ($totalStmt === FALSE) {
         throw new Exception("Gagal menyiapkan statement total: " . $conn->error);
     }
+    $totalStmt->bind_param("s", $nis);
     $totalStmt->execute();
     $totalResult = $totalStmt->get_result();
     $total = $totalResult->fetch_assoc()['total'];
     $totalStmt->close();
 
-    // Dapatkan catatan bulan ini
+    // Dapatkan catatan bulan ini untuk siswa ini
     $bulanIni = date('Y-m-01');
-    $stmtBulanIni = $conn->prepare("SELECT COUNT(*) AS bulan_ini FROM catatan WHERE tanggal_catatan >= ?");
+    $akhirBulanIni = date('Y-m-t');
+    $stmtBulanIni = $conn->prepare("SELECT COUNT(*) AS bulan_ini FROM catatan WHERE nis = ? AND tanggal_catatan >= ? AND tanggal_catatan <= ?");
     if ($stmtBulanIni === FALSE) {
         throw new Exception("Gagal menyiapkan statement bulan ini: " . $conn->error);
     }
-    $stmtBulanIni->bind_param("s", $bulanIni);
+    $stmtBulanIni->bind_param("sss", $nis, $bulanIni, $akhirBulanIni);
     $stmtBulanIni->execute();
     $bulanIniResult = $stmtBulanIni->get_result();
     $bulanIniCount = $bulanIniResult->fetch_assoc()['bulan_ini'];

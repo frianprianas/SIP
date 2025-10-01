@@ -270,16 +270,16 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
     try {
       final riwayatList = await _apiService.getRiwayatKehadiranGuru(
         widget.guru.nipy,
-        limit: 3, // Ambil 3 data terakhir untuk preview
+        limit: 2, // Ambil 2 data terakhir untuk preview
       );
       if (mounted && riwayatList.isNotEmpty) {
         setState(() {
           _recentKehadiran = riwayatList;
-          // Buat preview text dari 3 kehadiran terakhir
+          // Buat preview text dari 2 kehadiran terakhir
           _riwayatPreview = riwayatList.map((kehadiran) {
             final date = _formatDate(kehadiran.waktuTap);
             return '$date: ${kehadiran.status}';
-          }).join(' • ');
+          }).take(2).join(' • '); // Batasi hanya 2 item
         });
       }
     } catch (e) {
@@ -405,12 +405,12 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                               Text(
                                 'Informasi Guru',
                                 style: GoogleFonts.poppins(
-                                  fontSize: 22,
+                                  fontSize: 20,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.blueAccent,
                                 ),
                               ),
-                              const Divider(height: 20, thickness: 1),
+                              const Divider(height: 15, thickness: 1),
                               // Menampilkan informasi guru
                               _buildInfoRow(Icons.badge, 'NIPY', widget.guru.nipy),
                               _buildInfoRow(Icons.person, 'Nama', widget.guru.nama),
@@ -421,7 +421,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 12),
 
                       // Menampilkan status kehadiran terakhir
                       if (_lastKehadiran != null)
@@ -439,18 +439,18 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                                 Text(
                                   'Status Kehadiran Terakhir',
                                   style: GoogleFonts.poppins(
-                                    fontSize: 22,
+                                    fontSize: 20,
                                     fontWeight: FontWeight.bold,
                                     color: _lastKehadiran!.status == 'MASUK' ? Colors.green[700] : Colors.red[700],
                                   ),
                                 ),
-                                const Divider(height: 20, thickness: 1),
+                                const Divider(height: 15, thickness: 1),
                                 Row(
                                   children: [
                                     Icon(
                                       _lastKehadiran!.status == 'MASUK' ? Icons.login : Icons.logout,
                                       color: _lastKehadiran!.status == 'MASUK' ? Colors.green : Colors.red,
-                                      size: 30,
+                                      size: 26,
                                     ),
                                     const SizedBox(width: 15),
                                     Expanded(
@@ -459,11 +459,11 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                                         children: [
                                           Text(
                                             'Status: ${_lastKehadiran!.status}',
-                                            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18),
+                                            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16),
                                           ),
                                           Text(
                                             'Waktu: ${_formatDateTime(_lastKehadiran!.waktuTap)}',
-                                            style: GoogleFonts.poppins(color: Colors.grey[700], fontSize: 16),
+                                            style: GoogleFonts.poppins(color: Colors.grey[700], fontSize: 14),
                                             softWrap: true,
                                           ),
                                         ],
@@ -549,15 +549,15 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                       //     ),
                       //   ),
                       // --- end new ---
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 12),
 
                       // Grid menu untuk guru
                       GridView.count(
                         physics: const NeverScrollableScrollPhysics(),
                         shrinkWrap: true,
                         crossAxisCount: 2,
-                        crossAxisSpacing: 15,
-                        mainAxisSpacing: 15,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
                         children: [
                           _buildDashboardCard(
                             context,
@@ -596,15 +596,15 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                             },
                             child: _riwayatPreview.isNotEmpty
                                 ? Padding(
-                                    padding: const EdgeInsets.only(top: 8.0),
+                                    padding: const EdgeInsets.only(top: 6.0),
                                     child: Text(
                                       _riwayatPreview,
                                       style: GoogleFonts.poppins(
-                                        fontSize: 12,
+                                        fontSize: 10,
                                         color: Colors.white70,
                                       ),
                                       textAlign: TextAlign.center,
-                                      maxLines: 2,
+                                      maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   )
@@ -802,17 +802,17 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
             gradient: gradient,
           ),
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(12.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 60, color: iconColor),
-                const SizedBox(height: 10),
+                Icon(icon, size: 50, color: iconColor),
+                const SizedBox(height: 8),
                 Text(
                   title,
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: textColor,
                   ),

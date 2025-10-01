@@ -369,14 +369,14 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
                             ),
                           ),
                         ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 12),
 
                       GridView.count(
                         physics: const NeverScrollableScrollPhysics(),
                         shrinkWrap: true,
                         crossAxisCount: 2,
-                        crossAxisSpacing: 15,
-                        mainAxisSpacing: 15,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
                         children: [
                           _buildDashboardCard(
                             context,
@@ -552,17 +552,17 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
             gradient: gradient,
           ),
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(12.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 60, color: Colors.white),
-                const SizedBox(height: 10),
+                Icon(icon, size: 50, color: Colors.white),
+                const SizedBox(height: 8),
                 Text(
                   title,
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),

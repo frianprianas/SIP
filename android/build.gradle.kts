@@ -11,8 +11,9 @@ buildscript {
 
 plugins {
     id("com.android.application") version "8.7.0" apply false // Contoh, versi mungkin beda
-    id("org.jetbrains.kotlin.android") version "1.8.22" apply false // Contoh, versi mungkin beda
-    id("com.google.gms.google-services") version "4.4.1"  // <--- TAMBAHKAN BARIS INI (TANPA apply false)
+    id("org.jetbrains.kotlin.android") version "1.8.22" apply false // Keep original Kotlin version
+    // Temporarily disabled google-services plugin
+    // id("com.google.gms.google-services") version "4.4.1"  // <--- TAMBAHKAN BARIS INI (TANPA apply false)
 }
 allprojects {
     repositories {

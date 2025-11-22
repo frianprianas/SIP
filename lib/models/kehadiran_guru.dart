@@ -41,9 +41,7 @@ class KehadiranGuru {
       'status': status,
       'keterangan': keterangan,
     };
-    if (id != null) {
-      data['id'] = id;
-    }
-    return data;
+    data['id'] = id;
+      return data;
   }
 }

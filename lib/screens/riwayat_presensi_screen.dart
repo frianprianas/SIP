@@ -276,7 +276,7 @@ class _RiwayatPresensiScreenState extends State<RiwayatPresensiScreen> {
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<int?>(
-                                value: _selectedMonth,
+                                initialValue: _selectedMonth,
                                 decoration: InputDecoration(
                                   labelText: 'Bulan',
                                   labelStyle: GoogleFonts.poppins(color: Colors.grey[700]),
@@ -316,7 +316,7 @@ class _RiwayatPresensiScreenState extends State<RiwayatPresensiScreen> {
                             const SizedBox(width: 5),
                             Expanded(
                               child: DropdownButtonFormField<int?>(
-                                value: _selectedYear,
+                                initialValue: _selectedYear,
                                 decoration: InputDecoration(
                                   labelText: 'Tahun',
                                   labelStyle: GoogleFonts.poppins(color: Colors.grey[700]),

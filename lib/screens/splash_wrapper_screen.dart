@@ -5,7 +5,7 @@ import 'login_screen.dart';
 import 'dashboard_siswa_screen.dart';
 import 'dashboard_guru_screen.dart'; // Tambahkan import dashboard guru
 import '../services/api_service.dart';
-import '../models/guru.dart';         // Import model guru jika perlu
+// Import model guru jika perlu
 
 class SplashWrapperScreen extends StatefulWidget {
   const SplashWrapperScreen({super.key});

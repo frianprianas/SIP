@@ -772,4 +772,40 @@ Future<List<String>> getDatesWithNotesGuru(String nipy, int year, int month) asy
     return [];
   }
 }
+
+  /// Mengirim notifikasi FCM ke siswa yang belum presensi
+  Future<bool> sendNotificationToStudents(
+    List<String> nisList, 
+    String title, 
+    String message,
+    String kelas
+  ) async {
+    try {
+      print('Sending notification to students: $nisList');
+      
+      final response = await http.post(
+        Uri.parse('$_baseUrl/fcm/send_notification_to_students.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'nis_list': nisList,
+          'title': title,
+          'message': message,
+          'kelas': kelas,
+        }),
+      );
+
+      print('FCM Response: ${response.statusCode} - ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        return responseData['success'] == true;
+      } else {
+        print('HTTP Error (sendNotificationToStudents): ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('Error during sendNotificationToStudents: $e');
+      return false;
+    }
+  }
 }

@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart'; // Impor untuk memformat tanggal
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 import '../models/siswa.dart';
 import '../models/kehadiran.dart'; // Menggunakan model kehadiran.dart
@@ -21,6 +23,7 @@ class _KelasScreenState extends State<KelasScreen> {
 
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
+  bool _isSendingNotification = false;
   List<Kehadiran> _kehadiranList = [];
   List<Siswa> _students = [];
 
@@ -101,6 +104,228 @@ class _KelasScreenState extends State<KelasScreen> {
         _selectedDate = picked;
       });
       await _fetchStudentsAndKehadiran();
+    }
+  }
+
+  /// Mengirim notifikasi broadcast ke siswa yang belum presensi
+  Future<void> _sendNotificationToAbsentStudents(String message) async {
+    setState(() {
+      _isSendingNotification = true;
+    });
+
+    try {
+      // Cari siswa yang belum presensi (tidak ada di kehadiran list atau status tidak 'hadir')
+      final List<String> absentNisList = [];
+      
+      for (final student in _students) {
+        final kehadiran = _kehadiranList.firstWhere(
+          (k) => k.nis == student.nis,
+          orElse: () => Kehadiran(
+            id: 0,
+            nis: student.nis,
+            nama: student.nama,
+            waktuTap: '',
+            status: 'belum presensi',
+          ),
+        );
+        
+        // Jika belum presensi atau statusnya bukan 'hadir'
+        if (kehadiran.status.toLowerCase() != 'hadir') {
+          absentNisList.add(student.nis);
+        }
+      }
+
+      if (absentNisList.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Semua siswa sudah presensi!'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Kirim notifikasi broadcast
+      final success = await _apiService.sendNotificationToStudents(
+        absentNisList,
+        'Reminder Presensi',
+        message,
+        widget.namaKelas,
+      );
+
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Broadcast notifikasi berhasil dikirim ke ${absentNisList.length} siswa yang belum presensi!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Gagal mengirim broadcast notifikasi!'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSendingNotification = false;
+        });
+      }
+    }
+  }
+
+  /// Menampilkan dialog untuk input pesan notifikasi broadcast
+  Future<void> _showNotificationDialog() async {
+    final TextEditingController messageController = TextEditingController(
+      text: 'Silahkan untuk melakukan presensi'
+    );
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.notifications_active, color: Colors.blue.shade700),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Broadcast Reminder', 
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Colors.grey[800]
+                  )
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200)
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.broadcast_on_home, color: Colors.orange.shade700, size: 20),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Notifikasi akan dikirim sekaligus ke semua siswa yang belum presensi',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.orange.shade700,
+                          fontWeight: FontWeight.w500
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Kelas: ${widget.namaKelas}',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500
+                ),
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Pesan:',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[700]
+                ),
+              ),
+              SizedBox(height: 8),
+              TextField(
+                controller: messageController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'Masukkan pesan reminder...',
+                  hintStyle: GoogleFonts.poppins(color: Colors.grey[400]),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.shade300)
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.blue, width: 2)
+                  ),
+                  contentPadding: EdgeInsets.all(16),
+                ),
+                style: GoogleFonts.poppins(fontSize: 14),
+              ),
+            ],
+          ),
+          actionsPadding: EdgeInsets.all(16),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Batal',
+                style: GoogleFonts.poppins(
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(messageController.text.trim()),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              child: Text(
+                'Kirim Broadcast',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result != null && result.isNotEmpty) {
+      await _sendNotificationToAbsentStudents(result);
     }
   }
 
@@ -379,6 +604,48 @@ class _KelasScreenState extends State<KelasScreen> {
                 ),
               ),
             ),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blue.shade400, Colors.blue.shade600],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.blue.withOpacity(0.3),
+              spreadRadius: 2,
+              blurRadius: 8,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: _isSendingNotification ? null : _showNotificationDialog,
+            child: Container(
+              padding: EdgeInsets.all(16),
+              child: _isSendingNotification
+                ? SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      strokeWidth: 2,
+                    ),
+                  )
+                : Icon(
+                    Icons.notifications_active,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 

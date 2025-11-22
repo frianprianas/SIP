@@ -1,8 +1,7 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http; // <-- Tambahkan ini
-import 'package:shared_preferences/shared_preferences.dart'; // <-- Tambahkan ini
+// <-- Tambahkan ini
+// <-- Tambahkan ini
 import 'package:intl/date_symbol_data_local.dart'; // Impor untuk memformat tanggal
 import 'screens/splash_wrapper_screen.dart'; // Import SplashWrapperScreen
 import 'package:firebase_core/firebase_core.dart';

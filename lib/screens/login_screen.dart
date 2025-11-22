@@ -211,7 +211,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 25),
                           DropdownButtonFormField<String>(
-                            value: _selectedUserType,
+                            initialValue: _selectedUserType,
                             decoration: InputDecoration(
                               labelText: 'Masuk Sebagai',
                               border: OutlineInputBorder(

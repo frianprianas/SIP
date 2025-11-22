@@ -47,6 +47,9 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
   // --- New: preview riwayat kehadiran ---
   List<KehadiranGuru> _recentKehadiran = [];
   String _riwayatPreview = '';
+  final ScrollController _riwayatPreviewController = ScrollController();
+  Timer? _riwayatMarqueeTimer;
+  bool _riwayatMarqueeAnimating = false;
   // --- end new ---
 
   @override
@@ -242,7 +245,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
       final maxScroll = _catatanPreviewController.position.hasContentDimensions
           ? _catatanPreviewController.position.maxScrollExtent
           : 0.0;
-      print('DEBUG marquee: preview="${_lastNotePreview}", maxScroll=$maxScroll');
+      print('DEBUG marquee: preview="$_lastNotePreview", maxScroll=$maxScroll');
       if (_lastNotePreview.isEmpty || maxScroll <= 0) return;
       // loop animation: animate to end, then jump to start after a pause
       _marqueeTimer = Timer.periodic(_marqueeScrollDuration + _marqueeDelay, (_) async {
@@ -281,16 +284,55 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
             return '$date: ${kehadiran.status}';
           }).take(2).join(' • '); // Batasi hanya 2 item
         });
+        // Start marquee animation untuk riwayat
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _startRiwayatMarquee();
+        });
       }
     } catch (e) {
       print('Error fetching recent riwayat kehadiran: $e');
     }
   }
 
+  void _startRiwayatMarquee() {
+    _riwayatMarqueeTimer?.cancel();
+    _riwayatMarqueeAnimating = false;
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final maxScroll = _riwayatPreviewController.position.hasContentDimensions
+          ? _riwayatPreviewController.position.maxScrollExtent
+          : 0.0;
+      
+      if (_riwayatPreview.isEmpty || maxScroll <= 0) return;
+      
+      // Loop animation: animate to end, then jump to start after a pause
+      _riwayatMarqueeTimer = Timer.periodic(_marqueeScrollDuration + _marqueeDelay, (_) async {
+        if (!mounted) return;
+        try {
+          await _riwayatPreviewController.animateTo(
+            _riwayatPreviewController.position.maxScrollExtent,
+            duration: _marqueeScrollDuration,
+            curve: Curves.linear,
+          );
+          // Small pause
+          await Future.delayed(_marqueeDelay);
+          if (!mounted) return;
+          _riwayatPreviewController.jumpTo(0);
+        } catch (e) {
+          print('DEBUG riwayat marquee error: $e');
+        }
+      });
+      _riwayatMarqueeAnimating = true;
+    });
+  }
+
   @override
   void dispose() {
     _marqueeTimer?.cancel();
+    _riwayatMarqueeTimer?.cancel();
     _catatanPreviewController.dispose();
+    _riwayatPreviewController.dispose();
     super.dispose();
   }
 
@@ -368,7 +410,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                           ),
                           const SizedBox(height: 5),
                           Text(
-                            '${widget.guru.nipy}',
+                            widget.guru.nipy,
                             textAlign: TextAlign.center,
                             style: GoogleFonts.poppins(
                               color: Colors.white70,
@@ -597,15 +639,29 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                             child: _riwayatPreview.isNotEmpty
                                 ? Padding(
                                     padding: const EdgeInsets.only(top: 6.0),
-                                    child: Text(
-                                      _riwayatPreview,
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 10,
-                                        color: Colors.white70,
+                                    child: SizedBox(
+                                      height: 16,
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.chevron_right, color: Colors.white70, size: 12),
+                                          Expanded(
+                                            child: ClipRect(
+                                              child: SingleChildScrollView(
+                                                controller: _riwayatPreviewController,
+                                                scrollDirection: Axis.horizontal,
+                                                physics: const NeverScrollableScrollPhysics(),
+                                                child: Text(
+                                                  _riwayatPreview,
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: 10,
+                                                    color: Colors.white70,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      textAlign: TextAlign.center,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   )
                                 : null,

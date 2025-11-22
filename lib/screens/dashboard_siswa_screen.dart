@@ -33,8 +33,11 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
   final Duration _marqueeScrollDuration = const Duration(seconds: 6);
 
   // Preview riwayat presensi
-  List<Kehadiran> _recentPresensi = [];
-  String _riwayatPreview = '';
+  final List<Kehadiran> _recentPresensi = [];
+  final String _riwayatPreview = '';
+  String _lastRiwayatPreview = '';
+  final ScrollController _riwayatPreviewController = ScrollController();
+  Timer? _riwayatMarqueeTimer;
 
   @override
   void initState() {
@@ -42,6 +45,7 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
     // Tidak perlu lagi memanggil _saveNisOnLogin() karena sudah dilakukan di LoginScreen
     _fetchInitialLastPresensi();
     _fetchLatestCatatanPreview();
+    _fetchRecentRiwayatPresensi();
   }
 
   Future<void> _fetchInitialLastPresensi() async {
@@ -119,6 +123,50 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
     });
   }
 
+  Future<void> _fetchRecentRiwayatPresensi() async {
+    try {
+      final response = await _apiService.getRiwayatPresensi(widget.siswa.nis);
+      if (response.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _lastRiwayatPreview = response.take(3).map((r) =>
+              "${r.waktuTap} - ${r.status}"
+            ).join("   •   ");
+          });
+          _startRiwayatMarquee();
+        }
+      }
+    } catch (e) {
+      // Handle error silently
+    }
+  }
+
+  void _startRiwayatMarquee() {
+    if (_riwayatMarqueeTimer?.isActive == true) {
+      _riwayatMarqueeTimer!.cancel();
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final maxScroll = _riwayatPreviewController.position.hasContentDimensions
+          ? _riwayatPreviewController.position.maxScrollExtent
+          : 0.0;
+      if (_lastRiwayatPreview.isEmpty || maxScroll <= 0) return;
+      _riwayatMarqueeTimer = Timer.periodic(_marqueeScrollDuration + _marqueeDelay, (_) async {
+        if (!mounted) return;
+        try {
+          await _riwayatPreviewController.animateTo(
+            _riwayatPreviewController.position.maxScrollExtent,
+            duration: _marqueeScrollDuration,
+            curve: Curves.linear,
+          );
+          await Future.delayed(_marqueeDelay);
+          if (!mounted) return;
+          _riwayatPreviewController.jumpTo(0);
+        } catch (e) {}
+      });
+    });
+  }
+
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -149,6 +197,15 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
         );
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _marqueeTimer?.cancel();
+    _riwayatMarqueeTimer?.cancel();
+    _catatanPreviewController.dispose();
+    _riwayatPreviewController.dispose();
+    super.dispose();
   }
 
   String _formatDateTime(String dateTimeString) {
@@ -234,7 +291,7 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
                           ),
                           const SizedBox(height: 5),
                           Text(
-                            '${widget.siswa.nis}',
+                            widget.siswa.nis,
                             textAlign: TextAlign.center,
                             style: GoogleFonts.poppins(
                               color: Colors.white70,
@@ -412,6 +469,24 @@ class _DashboardSiswaScreenState extends State<DashboardSiswaScreen> {
                                         )),
                               );
                             },
+                            child: _lastRiwayatPreview.isNotEmpty 
+                              ? Container(
+                                  height: 20,
+                                  margin: const EdgeInsets.only(top: 8),
+                                  child: SingleChildScrollView(
+                                    controller: _riwayatPreviewController,
+                                    scrollDirection: Axis.horizontal,
+                                    child: Text(
+                                      _lastRiwayatPreview,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 10,
+                                        color: Colors.white70,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : null,
                           ),
                           // --- Bagian yang diubah: "Profil Saya" menjadi "Catatan" ---
                           _buildDashboardCard(

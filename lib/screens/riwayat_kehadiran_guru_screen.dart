@@ -276,7 +276,7 @@ class _RiwayatKehadiranGuruScreenState extends State<RiwayatKehadiranGuruScreen>
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<int?>(
-                                value: _selectedMonth,
+                                initialValue: _selectedMonth,
                                 decoration: InputDecoration(
                                   labelText: 'Bulan',
                                   labelStyle: GoogleFonts.poppins(color: Colors.grey[700]),
@@ -316,7 +316,7 @@ class _RiwayatKehadiranGuruScreenState extends State<RiwayatKehadiranGuruScreen>
                             const SizedBox(width: 5),
                             Expanded(
                               child: DropdownButtonFormField<int?>(
-                                value: _selectedYear,
+                                initialValue: _selectedYear,
                                 decoration: InputDecoration(
                                   labelText: 'Tahun',
                                   labelStyle: GoogleFonts.poppins(color: Colors.grey[700]),
@@ -491,7 +491,7 @@ class _RiwayatKehadiranGuruScreenState extends State<RiwayatKehadiranGuruScreen>
                                           ),
                                         ),
                                         const SizedBox(width: 10),
-                                        if (kehadiran.id! > 0)
+                                        if (kehadiran.id > 0)
                                           Container(
                                             decoration: BoxDecoration(
                                               color: Colors.blue.shade50,
@@ -519,7 +519,7 @@ class _RiwayatKehadiranGuruScreenState extends State<RiwayatKehadiranGuruScreen>
                               ),
                             ),
                           );
-                        }).toList(),
+                        }),
 
                         // Ringkasan Bulan Ini (tampilkan di bawah daftar riwayat)
                         const SizedBox(height: 20),
